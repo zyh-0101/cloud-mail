@@ -8,6 +8,10 @@ on:
       - "mail-vue/**"
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   Deploy-cloud-mail:
     name: 🏗️ Build and Deploy
@@ -257,8 +261,8 @@ jobs:
           fi
 
       - name: 🗑️ Delete workflow runs
-        uses: GitRML/delete-workflow-runs@main
+        uses: GitRML/delete-workflow-runs@v1.2.2
         continue-on-error: true
         with:
-          retain_days: '1'
-          keep_minimum_runs: '0'
+          retain_days: '7'
+          keep_minimum_runs: '3'
