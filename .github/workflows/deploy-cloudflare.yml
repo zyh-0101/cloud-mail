@@ -165,10 +165,10 @@ jobs:
             KV_ID=$(echo "$KV_LIST" | jq -r ".[] | select(.title == \"$NAME\") | .id")
             echo "KV_NAMESPACE_ID: $KV_ID"
           else
-            echo "⚠️ Database $NAME does not exist. Starting creation..."
-            pnpm wrangler kv namespace create $NAME
-            KV_LIST=$(pnpm wrangler kv namespace list)
-            KV_ID=$(echo "$KV_LIST" | jq -r ".[] | select(.title == \"$NAME\") | .id")
+            echo "❌ KV namespace \"$NAME\" not found and secret KV_NAMESPACE_ID is empty."
+            echo "   Cloudflare → Workers KV → 复制 ID，写入仓库 secret KV_NAMESPACE_ID 后重跑。"
+            echo "   （禁止自动新建：新建空命名空间会让绑定指向空数据，表现为数据丢失）"
+            exit 1
           fi
           
           sed -i "s|\${KV_NAMESPACE_ID}|$KV_ID|g" "$CONFIG_FILE"
@@ -203,14 +203,25 @@ jobs:
             D1_ID=$(echo "$DB_LIST" | jq -r ".[] | select(.name == \"$NAME\") | .uuid")
             echo "D1_DATABASE_ID: $D1_ID"
           else
-            echo "⚠️ Database $NAME does not exist. Starting creation..."
-            pnpm wrangler d1 create $NAME
-            DB_LIST=$(pnpm wrangler d1 list --json)
-            D1_ID=$(echo "$DB_LIST" | jq -r ".[] | select(.name == \"$NAME\") | .uuid")
+            echo "❌ D1 database \"$NAME\" not found and secret D1_DATABASE_ID is empty."
+            echo "   Cloudflare → D1 → 复制 UUID，写入仓库 secret D1_DATABASE_ID 后重跑。"
+            echo "   （禁止自动新建：新建空库会让绑定指向空数据，表现为数据丢失）"
+            exit 1
           fi
           
           sed -i "s|\${D1_DATABASE_ID}|$D1_ID|g" "$CONFIG_FILE"
           echo "✅ Setup completed."
+
+      - name: 🔎 Verify bindings resolved
+        working-directory: ./mail-worker
+        run: |
+          echo "🔎 检查 wrangler-action.toml 的绑定 ID 是否已解析..."
+          if grep -nE 'id = "\$\{(KV_NAMESPACE_ID|D1_DATABASE_ID)\}"' wrangler-action.toml; then
+            echo "❌ 绑定 ID 未解析：这样部署会把 kv/db 绑定丢掉。"
+            echo "   请检查仓库 secret KV_NAMESPACE_ID / D1_DATABASE_ID。"
+            exit 1
+          fi
+          echo "✅ kv/db 绑定 ID 已解析。"
 
       - name: 🚀 Start deployment
         id: deploy
@@ -259,6 +270,27 @@ jobs:
             echo "❌ Failed. HTTP: $HTTP_CODE, Response: $RESPONSE_BODY"
             exit 1
           fi
+
+      - name: 🩺 Post-deploy smoke test
+        run: |
+          WORKER_URL="${CUSTOM_DOMAIN:+https://$CUSTOM_DOMAIN}"
+          WORKER_URL="${WORKER_URL:-${{ steps.deploy.outputs.worker_url }}}"
+          echo "🩺 检查 $WORKER_URL/api/setting/websiteConfig"
+          CODE=000
+          for i in 1 2 3 4 5; do
+            CODE=$(curl -s -o smoke.json -w "%{http_code}" "$WORKER_URL/api/setting/websiteConfig" || true)
+            echo "第 $i 次：HTTP $CODE"
+            if [ "$CODE" = "200" ] && ! grep -q "未绑定" smoke.json; then
+              echo "✅ 接口正常：$(head -c 120 smoke.json)"
+              exit 0
+            fi
+            cat smoke.json 2>/dev/null || true
+            echo
+            sleep 10
+          done
+          echo "❌ 部署后接口异常（最后一次 HTTP $CODE）。常见原因：Cloudflare 面板里手改/删除过 kv、db 绑定。"
+          echo "   处理：重新运行本工作流即可恢复（配置是唯一来源，不要在面板改绑定）。"
+          exit 1
 
       - name: 🗑️ Delete workflow runs
         uses: GitRML/delete-workflow-runs@v1.2.2
