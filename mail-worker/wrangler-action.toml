@@ -12,11 +12,11 @@ custom_domain = true
 [[d1_databases]]
 binding = "db"
 database_name = "cloud-mail"
-database_id = "${D1_DATABASE_ID}"
+database_id = "f90e6997-29d4-4cbd-9c85-f882df94991f"   # 写死，不依赖 GitHub secret
 
 [[kv_namespaces]]
 binding = "kv"
-id = "${KV_NAMESPACE_ID}"
+id = "f95416344ee84de7aa33778769c4e850"   # 写死，不依赖 GitHub secret
 
 [[r2_buckets]]
 binding = "r2"
