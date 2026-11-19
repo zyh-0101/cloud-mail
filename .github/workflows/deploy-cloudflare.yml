@@ -142,6 +142,11 @@ jobs:
           
           CONFIG_FILE="wrangler-action.toml"
           
+          if ! grep -q '\${KV_NAMESPACE_ID}' "$CONFIG_FILE"; then
+            echo "ℹ️ KV id 已写死在 wrangler-action.toml，跳过 secret 替换。"
+            exit 0
+          fi
+          
           if [ -n "$KV_NAMESPACE_ID" ]; then
             sed -i "s|\${KV_NAMESPACE_ID}|${KV_NAMESPACE_ID}|g" "$CONFIG_FILE"
             echo "✅ Using the database from environment variables."
@@ -179,6 +184,11 @@ jobs:
         run: |
           
           CONFIG_FILE="wrangler-action.toml"
+          
+          if ! grep -q '\${D1_DATABASE_ID}' "$CONFIG_FILE"; then
+            echo "ℹ️ D1 id 已写死在 wrangler-action.toml，跳过 secret 替换。"
+            exit 0
+          fi
           
           if [ -n "$D1_DATABASE_ID" ]; then
             sed -i "s|\${D1_DATABASE_ID}|${D1_DATABASE_ID}|g" "$CONFIG_FILE"
